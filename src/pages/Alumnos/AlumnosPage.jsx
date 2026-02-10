@@ -134,7 +134,7 @@ export default function AlumnosPage() {
                                                     {alumno.apellido}, {alumno.nombre}
                                                 </p>
                                                 <p className="text-xs text-gray-500">
-                                                    Edad: {differenceInYears(new Date(), new Date(alumno.fecha_nacimiento))} años
+                                                    Edad: {alumno.fecha_nacimiento ? `${differenceInYears(new Date(), new Date(alumno.fecha_nacimiento))} años` : '-'}
                                                 </p>
                                             </div>
                                         </div>
