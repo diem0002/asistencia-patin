@@ -2,9 +2,11 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Users, UserCheck, Menu, X, UsersRound, BarChart3, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Layout() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const { signOut } = useAuth();
     const location = useLocation();
 
     const navigation = [
@@ -55,6 +57,12 @@ export default function Layout() {
                                         </Link>
                                     );
                                 })}
+                                <button
+                                    onClick={signOut}
+                                    className="px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 text-gray-500 hover:bg-gray-50 hover:text-red-600 transition-all duration-200"
+                                >
+                                    Cerrar Sesión
+                                </button>
                             </div>
                         </div>
 
@@ -93,6 +101,12 @@ export default function Layout() {
                                     </Link>
                                 );
                             })}
+                            <button
+                                onClick={() => { setIsMenuOpen(false); signOut(); }}
+                                className="block w-full text-left px-3 py-2 rounded-md text-base font-medium flex items-center gap-3 text-red-600 hover:bg-red-50"
+                            >
+                                Cerrar Sesión
+                            </button>
                         </div>
                     </div>
                 )}
