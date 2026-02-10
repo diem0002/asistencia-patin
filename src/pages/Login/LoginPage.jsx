@@ -30,8 +30,8 @@ export default function LoginPage() {
         <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
                 <div className="bg-casr-red p-8 text-center">
-                    <div className="mx-auto h-16 w-16 bg-white rounded-full flex items-center justify-center mb-4 shadow-lg">
-                        <Lock className="h-8 w-8 text-casr-red" />
+                    <div className="mx-auto h-24 w-24 bg-white rounded-full flex items-center justify-center mb-4 shadow-lg p-2">
+                        <img src="/logo.png" alt="Logo Club" className="h-full w-full object-contain" />
                     </div>
                     <h2 className="text-2xl font-bold text-white">Bienvenido</h2>
                     <p className="text-red-100 mt-1">Ingresa para gestionar la escuela</p>
