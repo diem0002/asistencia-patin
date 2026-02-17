@@ -9,7 +9,7 @@ export default function Dashboard() {
     const [stats, setStats] = useState({
         totalAlumnos: 0,
         totalGrupos: 0,
-        clasesHoy: 0
+        clasesMes: 0
     });
 
     const [cumpleanos, setCumpleanos] = useState([]);
@@ -28,24 +28,26 @@ export default function Dashboard() {
                 .select('*', { count: 'exact', head: true })
                 .eq('activo', true);
 
-            // 3. Clases de Hoy (REALES: Grupos que tienen asistencia tomada hoy)
-            const hoyStr = new Date().toISOString().split('T')[0];
+            // 3. Clases del Mes (REALES: Cantidad de clases tomadas en el mes actual)
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
 
-            // Consultamos asistencias únicas por grupo en el día de hoy
-            // (Supabase no tiene distinct count directo facil, hacemos un truco o fetch)
-            // Mejor fetch head de grupos que tienen asistencia hoy via inner join manual o buscando IDs.
-            // Forma simple: Traer todas las asistencias de hoy y contar unique grupo_id en JS (si son pocas)
-            const { data: asistenciasHoy } = await supabase
+            // Traemos fecha y grupo de todas las asistencias del mes
+            const { data: asistenciasMes } = await supabase
                 .from('asistencias')
-                .select('grupo_id')
-                .eq('fecha', hoyStr);
+                .select('grupo_id, fecha')
+                .gte('fecha', firstDay)
+                .lte('fecha', lastDay);
 
-            const gruposConClase = new Set(asistenciasHoy?.map(a => a.grupo_id)).size;
+            // Contamos combinaciones únicas de Grupo + Fecha
+            // (Ej: Grupo A el dia 1, Grupo A el dia 3 = 2 clases)
+            const clasesUnicas = new Set(asistenciasMes?.map(a => `${a.grupo_id}-${a.fecha}`)).size;
 
             setStats({
                 totalAlumnos: alumnosCount || 0,
                 totalGrupos: gruposCount || 0,
-                clasesHoy: gruposConClase || 0
+                clasesMes: clasesUnicas || 0
             });
 
             // 4. Cumpleaños del Mes
@@ -108,8 +110,8 @@ export default function Dashboard() {
                         <UserCheck className="w-8 h-8" />
                     </div>
                     <div>
-                        <h3 className="text-sm font-medium text-gray-500">Clases Dadas Hoy</h3>
-                        <p className="text-3xl font-bold text-gray-900">{stats.clasesHoy}</p>
+                        <h3 className="text-sm font-medium text-gray-500">Clases Dadas (Mes)</h3>
+                        <p className="text-3xl font-bold text-gray-900">{stats.clasesMes}</p>
                     </div>
                 </div>
             </div>
