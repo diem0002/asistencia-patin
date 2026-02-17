@@ -31,8 +31,12 @@ export const AuthProvider = ({ children }) => {
     };
 
     const signOut = async () => {
-        const { error } = await supabase.auth.signOut();
-        if (error) throw error;
+        try {
+            const { error } = await supabase.auth.signOut();
+            if (error) console.warn('Logout warning:', error.message);
+        } catch (error) {
+            console.warn('Logout error suppressed:', error);
+        }
     };
 
     // Password Reset (Simple Trigger)

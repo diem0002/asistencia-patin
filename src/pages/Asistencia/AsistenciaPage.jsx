@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Calendar, UserCheck, Check, X, Save, AlertCircle } from 'lucide-react';
+import { Calendar, UserCheck, Check, X, Save, AlertCircle, Trash2, CalendarOff } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -14,6 +14,7 @@ export default function AsistenciaPage() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState(null);
+    const [eventoDia, setEventoDia] = useState(null); // Si es feriado o cancelado
 
     // 1. Fetch Grupos on mount
     useEffect(() => {
@@ -24,7 +25,7 @@ export default function AsistenciaPage() {
         fetchGrupos();
     }, []);
 
-    // 2. Fetch Alumnos & Asistencias when Grupo or Date changes
+    // 2. Fetch Alumnos, Asistencias & Eventos when Grupo or Date changes
     useEffect(() => {
         if (!selectedGrupo) {
             setAlumnos([]);
@@ -34,6 +35,7 @@ export default function AsistenciaPage() {
         async function fetchData() {
             setLoading(true);
             setMessage(null);
+            setEventoDia(null);
             try {
                 // A. Get Students in this Group
                 const { data: alumnosData, error: alumnosError } = await supabase
@@ -48,7 +50,7 @@ export default function AsistenciaPage() {
 
                 if (alumnosError) throw alumnosError;
 
-                // B. Get Existing Attendance for this Date/Group
+                // B. Get Existing Attendance
                 const { data: asistenciaData, error: asistenciaError } = await supabase
                     .from('asistencias')
                     .select('*')
@@ -57,34 +59,27 @@ export default function AsistenciaPage() {
 
                 if (asistenciaError) throw asistenciaError;
 
+                // C. Get Events (Feriado/Cancelado)
+                // (Assuming agenda_eventos exists, created via SQL migration)
+                const { data: eventoData } = await supabase
+                    .from('agenda_eventos')
+                    .select('*')
+                    .eq('grupo_id', selectedGrupo)
+                    .eq('fecha', selectedDate)
+                    .single();
+
+                if (eventoData) setEventoDia(eventoData);
+
                 setAlumnos(alumnosData || []);
 
-                // Map existing attendance to state dictionary
+                // Map existing attendance
                 const asistenciaMap = {};
-                // Initialize all as false (Absent) by default if no record exists
-                // OR if record exists, use that value.
-                // Better UX: If no record, maybe consider them Present? Or Absent?
-                // Let's default to FALSE (Absent) and user taps to mark Present.
-
-                // If we have records, use them
                 if (asistenciaData && asistenciaData.length > 0) {
                     asistenciaData.forEach(record => {
                         asistenciaMap[record.alumno_id] = record.presente;
                     });
-                } else {
-                    // New register: Default to PRESENT (usually faster to mark absents) or ABSENT?
-                    // Let's default to FALSE so they have to tap.
-                    // Actually, for "Taking roll", usually everyone is Present except a few.
-                    // Let's default to TRUE (Present) for new records? NO, safe default is False to force check.
-                    // Let's stick to: undefined = not marked yet. false = absent. true = present.
-                    // For simplicity in this version, let's assume default ABSENT (false).
-                }
-
-                // If editing, merge.
-                if (asistenciaData.length > 0) {
                     setAsistencia(asistenciaMap);
                 } else {
-                    // Reset state for new day
                     setAsistencia({});
                 }
 
@@ -111,13 +106,11 @@ export default function AsistenciaPage() {
 
         setSaving(true);
         try {
-            // Prepare upsert data
             const upsertData = alumnos.map(alumno => ({
                 alumno_id: alumno.id,
                 grupo_id: selectedGrupo,
                 fecha: selectedDate,
-                presente: asistencia[alumno.id] || false, // Default false if undefined
-                // observaciones: ... (could add later)
+                presente: asistencia[alumno.id] || false,
             }));
 
             const { error } = await supabase
@@ -126,9 +119,10 @@ export default function AsistenciaPage() {
 
             if (error) throw error;
 
-            setMessage({ type: 'success', text: 'Asistencia guardada correctamente.' });
+            // Si había un evento (ej. cancelado) y guardamos asistencia, ¿deberíamos borrar el evento?
+            // Dejemos eso manual por ahora.
 
-            // Clear message after 3s
+            setMessage({ type: 'success', text: 'Asistencia guardada correctamente.' });
             setTimeout(() => setMessage(null), 3000);
 
         } catch (error) {
@@ -138,6 +132,77 @@ export default function AsistenciaPage() {
             setSaving(false);
         }
     };
+
+    const handleDeleteDay = async () => {
+        if (!window.confirm('¿Seguro que quieres BORRAR este día? Se eliminarán todas las asistencias registradas.')) return;
+
+        setSaving(true);
+        try {
+            const { error } = await supabase
+                .from('asistencias')
+                .delete()
+                .eq('grupo_id', selectedGrupo)
+                .eq('fecha', selectedDate); // Delete ALL for this group/date
+
+            if (error) throw error;
+
+            // Also delete event if exists
+            await supabase
+                .from('agenda_eventos')
+                .delete()
+                .eq('grupo_id', selectedGrupo)
+                .eq('fecha', selectedDate);
+
+            setAsistencia({});
+            setEventoDia(null);
+            setMessage({ type: 'success', text: 'Día eliminado correctamente.' });
+            setTimeout(() => setMessage(null), 3000);
+        } catch (error) {
+            console.error('Error deleting:', error);
+            setMessage({ type: 'error', text: 'Error al eliminar día.' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleMarkEvent = async (tipo) => {
+        // Tipo: 'FERIADO' o 'CANCELADO'
+        if (!window.confirm(`¿Marcar este día como ${tipo}?`)) return;
+
+        setSaving(true);
+        try {
+            // 1. Create Event
+            const { error } = await supabase.from('agenda_eventos').upsert({
+                grupo_id: selectedGrupo,
+                fecha: selectedDate,
+                tipo: tipo,
+                descripcion: tipo === 'FERIADO' ? 'Feriado Nacional / Local' : 'Clase Cancelada'
+            }, { onConflict: 'grupo_id, fecha' });
+
+            if (error) throw error;
+
+            // 2. Optional: Mark everyone absent or delete attendance?
+            // Usually if it's a holiday, we don't want "Absent" records affecting statistics.
+            // So we DELETE attendance records.
+            await supabase
+                .from('asistencias')
+                .delete()
+                .eq('grupo_id', selectedGrupo)
+                .eq('fecha', selectedDate);
+
+            setAsistencia({});
+            // Refresh event state logic would be nice, but manual set is faster
+            setEventoDia({ tipo });
+
+            setMessage({ type: 'success', text: `Día marcado como ${tipo}.` });
+        } catch (error) {
+            console.error('Error marking event:', error);
+            setMessage({ type: 'error', text: 'Error al registrar evento.' });
+        } finally {
+            setSaving(false);
+        }
+    }
+
 
     return (
         <div className="space-y-6 max-w-4xl mx-auto">
@@ -187,9 +252,36 @@ export default function AsistenciaPage() {
             {/* Students List */}
             {selectedGrupo && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+                    {/* Header with Tools */}
+                    <div className="p-4 bg-gray-50 border-b flex flex-col sm:flex-row justify-between items-center gap-4">
                         <span className="font-semibold text-gray-700">Listado de Alumnos ({alumnos.length})</span>
-                        <span className="text-xs text-gray-500 uppercase tracking-wider">Estado</span>
+
+                        <div className="flex gap-2">
+                            {eventoDia ? (
+                                <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-bold border border-yellow-200">
+                                    {eventoDia.tipo}
+                                </span>
+                            ) : (
+                                <>
+                                    <button onClick={() => handleMarkEvent('FERIADO')} className="text-xs bg-white border border-gray-300 text-gray-600 px-3 py-1 rounded hover:bg-gray-50">
+                                        Marcar Feriado
+                                    </button>
+                                    <button onClick={() => handleMarkEvent('CANCELADO')} className="text-xs bg-white border border-gray-300 text-gray-600 px-3 py-1 rounded hover:bg-gray-50">
+                                        Cancelar Clase
+                                    </button>
+                                </>
+                            )}
+
+                            {(Object.keys(asistencia).length > 0 || eventoDia) && (
+                                <button
+                                    onClick={handleDeleteDay}
+                                    title="Borrar todos los datos de este día"
+                                    className="p-2 text-red-500 hover:bg-red-50 rounded transition"
+                                >
+                                    <Trash2 className="w-5 h-5" />
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     {loading ? (
@@ -202,7 +294,19 @@ export default function AsistenciaPage() {
                         </div>
                     ) : (
                         <div className="divide-y divide-gray-100">
-                            {alumnos.map(alumno => {
+                            {/* Overlay for Event */}
+                            {eventoDia && (
+                                <div className="p-8 text-center bg-yellow-50/50">
+                                    <CalendarOff className="w-12 h-12 text-yellow-500 mx-auto mb-2" />
+                                    <h3 className="text-lg font-bold text-gray-700">Día marcado como {eventoDia.tipo}</h3>
+                                    <p className="text-gray-500">No se tomará asistencia.</p>
+                                    <button onClick={handleDeleteDay} className="mt-4 text-sm text-red-600 underline">
+                                        Restaurar día normal
+                                    </button>
+                                </div>
+                            )}
+
+                            {!eventoDia && alumnos.map(alumno => {
                                 const isPresent = asistencia[alumno.id] || false;
                                 return (
                                     <div key={alumno.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
@@ -243,7 +347,7 @@ export default function AsistenciaPage() {
                     )}
 
                     {/* Footer Actions */}
-                    {alumnos.length > 0 && (
+                    {alumnos.length > 0 && !eventoDia && (
                         <div className="p-6 bg-gray-50 border-t flex justify-end">
                             <button
                                 onClick={handleSave}
