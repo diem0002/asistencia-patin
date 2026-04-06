@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Plus, Trash2, Edit, Calendar, Clock, DollarSign } from 'lucide-react';
+import { Plus, Trash2, Edit, Calendar, Clock, DollarSign, FileDown } from 'lucide-react';
 import GrupoForm from '../../components/Grupos/GrupoForm';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const DIAS_SEMANANA = [
     'Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'
@@ -12,7 +14,69 @@ export default function GruposPage() {
     const [loading, setLoading] = useState(true);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingGrupo, setEditingGrupo] = useState(null);
+    const [exportingId, setExportingId] = useState(null);
 
+    useEffect(() => {
+        fetchGrupos();
+    }, []);
+
+    async function handleExportPDF(grupo) {
+        setExportingId(grupo.id);
+        try {
+            // Fetch students for this group
+            const { data: alumnosData, error } = await supabase
+                .from('alumnos')
+                .select(`
+                    nombre,
+                    apellido,
+                    alumnos_grupos!inner(grupo_id)
+                `)
+                .eq('activo', true)
+                .eq('alumnos_grupos.grupo_id', grupo.id)
+                .order('apellido');
+
+            if (error) throw error;
+
+            if (!alumnosData || alumnosData.length === 0) {
+                alert('No hay alumnos asignados a este grupo para exportar.');
+                setExportingId(null);
+                return;
+            }
+
+            // Prepare data for table
+            const tableData = alumnosData.map((alumno, index) => [
+                index + 1,
+                `${alumno.apellido}, ${alumno.nombre}`
+            ]);
+
+            // Generate PDF
+            const doc = new jsPDF();
+            
+            // Title
+            doc.setFontSize(18);
+            doc.text(`Lista de Alumnos - ${grupo.nombre}`, 14, 22);
+            doc.setFontSize(11);
+            doc.setTextColor(100);
+            doc.text(`Generado el: ${new Date().toLocaleDateString('es-AR')}`, 14, 30);
+
+            autoTable(doc, {
+                startY: 40,
+                head: [['N°', 'Apellido y Nombre']],
+                body: tableData,
+                theme: 'striped',
+                headStyles: { fillColor: [220, 38, 38] }, // casr-red color approximation
+                styles: { fontSize: 11, cellPadding: 3 }
+            });
+
+            doc.save(`Alumnos_${grupo.nombre.replace(/\s+/g, '_')}.pdf`);
+
+        } catch (err) {
+            console.error('Error exportando PDF:', err);
+            alert('Error al generar el PDF.');
+        } finally {
+            setExportingId(null);
+        }
+    }
     useEffect(() => {
         fetchGrupos();
     }, []);
@@ -111,6 +175,13 @@ export default function GruposPage() {
                                     <div className="flex justify-between items-start mb-4">
                                         <h3 className="text-xl font-bold text-gray-900 truncate pr-2">{grupo.nombre}</h3>
                                         <div className="flex gap-2 shrink-0">
+                                            <button onClick={() => handleExportPDF(grupo)} title="Descargar Lista PDF" className="text-gray-400 hover:text-green-600 disabled:opacity-50" disabled={exportingId === grupo.id}>
+                                                {exportingId === grupo.id ? (
+                                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-600"></div>
+                                                ) : (
+                                                    <FileDown className="w-5 h-5" />
+                                                )}
+                                            </button>
                                             <button onClick={() => handleOpenForm(grupo)} className="text-gray-400 hover:text-blue-600">
                                                 <Edit className="w-5 h-5" />
                                             </button>
