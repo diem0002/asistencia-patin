@@ -82,6 +82,14 @@ export default function AlumnoForm({ isOpen, onClose, onSave, alumnoToEdit }) {
             let alumnoId;
             const payload = { ...formData };
 
+            // Evitar error en base de datos si las fechas vienen vacías
+            if (payload.fecha_nacimiento === '') {
+                payload.fecha_nacimiento = null;
+            }
+            if (payload.fecha_inicio === '') {
+                payload.fecha_inicio = null;
+            }
+
             if (alumnoToEdit) {
                 // Edit Alumno
                 const { error } = await supabase
