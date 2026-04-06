@@ -186,8 +186,8 @@ export default function AlumnoForm({ isOpen, onClose, onSave, alumnoToEdit }) {
                             <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Contacto / Tutor</h3>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">Nombre Tutor *</label>
-                                <input required type="text" name="nombre_tutor" value={formData.nombre_tutor} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-casr-red focus:ring-casr-red sm:text-sm p-2 border" />
+                                <label className="block text-sm font-medium text-gray-700">Nombre Tutor</label>
+                                <input type="text" name="nombre_tutor" value={formData.nombre_tutor} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-casr-red focus:ring-casr-red sm:text-sm p-2 border" />
                             </div>
 
                             <div>
