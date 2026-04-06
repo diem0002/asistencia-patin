@@ -66,7 +66,7 @@ export default function AsistenciaPage() {
                     .select('*')
                     .eq('grupo_id', selectedGrupo)
                     .eq('fecha', selectedDate)
-                    .single();
+                    .maybeSingle();
 
                 if (eventoData) setEventoDia(eventoData);
 
