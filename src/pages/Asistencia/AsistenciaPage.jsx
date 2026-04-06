@@ -70,7 +70,17 @@ export default function AsistenciaPage() {
 
                 if (eventoData) setEventoDia(eventoData);
 
-                setAlumnos(alumnosData || []);
+                // Filter students who were assigned to the group AFTER the selectedDate
+                const filteredAlumnos = (alumnosData || []).filter(alumno => {
+                    // Try to get fecha_inicio. If it doesn't exist or is null, fallback to letting them show up.
+                    const fechaInicio = alumno.fecha_inicio;
+                    if (!fechaInicio) return true; // If no date, assume they are old students
+                    
+                    // Compare '2024-04-06' <= '2024-04-06'
+                    return fechaInicio <= selectedDate;
+                });
+
+                setAlumnos(filteredAlumnos);
 
                 // Map existing attendance
                 const asistenciaMap = {};
